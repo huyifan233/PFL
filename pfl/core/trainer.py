@@ -106,7 +106,7 @@ class TrainStrategy(object):
             if os.path.exists(init_model_pars_path):
                 shutil.move(init_model_pars_path, first_aggregate_path)
         file_list = os.listdir(job_model_path)
-
+        file_list.sort()
         if len(file_list) != 0:
             return os.path.join(job_model_path, file_list[-1]), len(file_list)
         return None, 0
@@ -171,6 +171,40 @@ class TrainNormalStrategy(TrainStrategy):
                    os.path.join(job_models_path, "tmp_parameters_{}".format(fed_step)))
 
         return accuracy, loss.item()
+
+    def _calc_kl_loss_between_models(self, fed_model, local_model):
+
+        dataloader = torch.utils.data.DataLoader(self.data,
+                                                 batch_size=128,
+                                                 shuffle=True,
+                                                 num_workers=1,
+                                                 pin_memory=True)
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # fed_model.to(device)
+        # local_model.to(device)
+        kl_loss_list = []
+        batch_kl_loss_list = []
+        for idx, (batch_data, batch_target) in enumerate(dataloader):
+            # batch_data, batch_target = batch_data.to(device), batch_target.to(device)
+            if idx % 20 == 0:
+                if len(batch_kl_loss_list) != 0:
+                    batch_mean_kl_loss = torch.mean(torch.tensor(batch_kl_loss_list, dtype=torch.float32))
+                    # print("batch_mean_kl_loss: ", batch_mean_kl_loss)
+                    kl_loss_list.append(batch_mean_kl_loss)
+                    batch_kl_loss_list.clear()
+            fed_pred = fed_model(batch_data)
+            local_pred = local_model(batch_data)
+            kl_loss = self._compute_loss(LossStrategy.KLDIV_LOSS, F.softmax(fed_pred, dim=1), F.softmax(local_pred, dim=1))
+
+            if not torch.isnan(kl_loss):
+                batch_kl_loss_list.append(kl_loss)
+        kl_loss_list.append(torch.mean(torch.tensor(batch_kl_loss_list, dtype=torch.float32)))
+        print("计算平均kl散度")
+        mean_kl_loss = torch.mean(torch.tensor(kl_loss_list, dtype=torch.float32))
+        return mean_kl_loss
+
+
 
     def _exec_finish_job(self, job_list):
         pass
@@ -428,6 +462,35 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
     def __init__(self, job, data, fed_step, client_id, model, curve):
         super(TrainStandloneNormalStrategy, self).__init__(job, data, fed_step, client_id, model, curve)
         self.logger = LoggerFactory.getLogger("TrainStandloneNormalStrategy", logging.INFO)
+        self.local_model_parameters_dir = os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id))
+
+    def _check_local_model_pars(self):
+        local_model_pars_files = os.listdir(self.local_model_parameters_dir)
+        if len(local_model_pars_files) != 0:
+            return True
+        return False
+
+    def _load_local_model_pars(self):
+        print("计算本地模型和全局模型的KL散度")
+        local_model_pars_files = os.listdir(self.local_model_parameters_dir)
+        if len(local_model_pars_files) != 0:
+            latest_local_model_pars_file = local_model_pars_files[-1]
+            letest_local_model_pars_path = os.path.join(self.local_model_parameters_dir, latest_local_model_pars_file)
+            return torch.load(letest_local_model_pars_path)
+        return None
+
+    def _append_to_kl_file(self, kl_loss, job_id, fed_step, client_id):
+
+        job_model_kl_dir = os.path.join(LOCAL_MODEL_BASE_PATH, "models_{}".format(job_id), "kl_loss_dir")
+        if not os.path.exists(job_model_kl_dir):
+            os.mkdir(job_model_kl_dir)
+        job_model_kl_path = os.path.join(job_model_kl_dir, "kl_loss_{}".format(fed_step))
+        with open(job_model_kl_path, "a+") as f:
+            f.write("{}:{}\n".format(client_id, kl_loss))
+
+        print("mean_kl_loss: ", kl_loss)
+
+
 
     def train(self):
         while True:
@@ -456,6 +519,16 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                     model_pars = torch.load(aggregate_file)
                     new_model.load_state_dict(model_pars)
                     self.model.set_model(new_model)
+                if self._check_local_model_pars():
+                    print("存在本地模型")
+                    local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
+                    local_model_pars = self._load_local_model_pars()
+                    local_model.load_state_dict(local_model_pars)
+                    kl_loss = self._calc_kl_loss_between_models(self.model.get_model(), local_model)
+                    self._append_to_kl_file(kl_loss, self.job.get_job_id(), fed_step, self.client_id)
+
+
+
                 job_models_path = self._create_job_models_dir(self.client_id, self.job.get_job_id())
                 self.logger.info("job_{} is training, Aggregator strategy: {}".format(self.job.get_job_id(),
                                                                                       self.job.get_aggregate_strategy()))

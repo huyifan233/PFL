@@ -65,7 +65,7 @@ class TrainerController(object):
                 PFLException("connect to parameter server fail, please check your internet")
 
     def _trainer_standalone_exec(self):
-        t = threading.Timer(5, self._trainer_standalone_exec_impl)
+        t = threading.Timer(1, self._trainer_standalone_exec_impl)
         t.start()
 
     def _trainer_standalone_exec_impl(self):

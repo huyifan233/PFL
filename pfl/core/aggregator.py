@@ -88,6 +88,22 @@ class FedAvgAggregator(Aggregator):
         super(FedAvgAggregator, self).__init__(work_mode, job_path, base_model_path)
         self.fed_step = {}
         self.logger = LoggerFactory.getLogger("FedAvgAggregator", logging.INFO)
+
+
+
+    def calc_client_priority(self, fed_step, job_id):
+        client_priority_weights = {}
+        kl_loss_path = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir","{}_{}".format("kl_loss", fed_step))
+        with open(kl_loss_path, "r") as f:
+            lines = f.readlines()
+
+        for line in lines:
+            line_split = line.split(":")
+            client_priority_weights[line_split[0]] = line_split[1]
+
+        return client_priority_weights
+
+
     def aggregate(self):
         """
 
@@ -103,8 +119,10 @@ class FedAvgAggregator(Aggregator):
             # print("fed_step: {}, self.fed_step: {}, job_model_pars: {}".format(fed_step, self.fed_step.get(job.get_job_id()), job_model_pars))
             job_fed_step = 0 if self.fed_step.get(job.get_job_id()) is None else self.fed_step.get(job.get_job_id())
             if job_fed_step != fed_step and job_model_pars is not None:
+                self.logger.info("计算每个节点的权重....")
+                self.client_priority_weights = self.calc_client_priority(fed_step, job.get_job_id())
                 self.logger.info("Aggregating......")
-                self._exec(job_model_pars, self.base_model_path, job.get_job_id(), fed_step)
+                self._exec(job_model_pars, self.base_model_path, job.get_job_id(), fed_step, self.client_priority_weights)
                 self.fed_step[job.get_job_id()] = fed_step
                 WAITING_BROADCAST_AGGREGATED_JOB_ID_LIST.append(job.get_job_id())
                 if job.get_epoch() <= self.fed_step[job.get_job_id()]:
@@ -117,7 +135,7 @@ class FedAvgAggregator(Aggregator):
                                     self.base_model_path)
 
 
-    def _exec(self, job_model_pars, base_model_path, job_id, fed_step):
+    def _exec(self, job_model_pars, base_model_path, job_id, fed_step, client_priority_weights):
         avg_model_par = job_model_pars[0]
         for key in avg_model_par.keys():
             for i in range(1, len(job_model_pars)):
