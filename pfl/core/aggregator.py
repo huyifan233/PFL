@@ -97,9 +97,15 @@ class FedAvgAggregator(Aggregator):
         with open(kl_loss_path, "r") as f:
             lines = f.readlines()
 
+        sum = 0
         for line in lines:
             line_split = line.split(":")
-            client_priority_weights[line_split[0]] = line_split[1]
+            client_priority_weights[int(line_split[0])] = float(line_split[1])
+            sum += float(line_split[1])
+
+        for key in client_priority_weights.keys():
+            flag = client_priority_weights[key]
+            client_priority_weights[key] = flag / sum
 
         return client_priority_weights
 
