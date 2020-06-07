@@ -49,10 +49,14 @@ def train_local_model_with_local_data(local_model, mnist_data):
 if __name__ == "__main__":
     # CLIENT_ID = int(sys.argv[1])
 
-    mnist_data = datasets.MNIST("./mnist_data", download=True, train=True, transform=transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.13066062,), (0.30810776,))
-    ]))
+    # mnist_data = datasets.MNIST("./mnist_data", download=True, train=True, transform=transforms.Compose([
+    #     transforms.ToTensor(),
+    #     transforms.Normalize((0.13066062,), (0.30810776,))
+    # ]))
+    dataset_path = os.path.join(os.path.abspath("../"), "mnist", "train_dataset_dir", "train_dataset_{}".format(CLIENT_ID))
+
+    dataset = torch.load(dataset_path)
+
     client = FLClient()
     pfl_models = client.get_remote_pfl_models()
 

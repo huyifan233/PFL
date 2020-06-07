@@ -5,7 +5,6 @@ import torchvision
 
 from torchvision import datasets, transforms
 
-DATA_CLIENT = 3
 
 
 def save_split_dataset(dataset_name, train_datasets, test_datasets):
@@ -26,19 +25,22 @@ def save_split_dataset(dataset_name, train_datasets, test_datasets):
 
     train_dataset_name = "train_dataset"
     for idx, dataset in enumerate(train_datasets):
-        dataset_name =  train_dataset_name+"_{}".format(idx)
+        dataset_name = train_dataset_name+"_{}".format(idx)
         dataset_path = os.path.join(train_dataset_dir, dataset_name)
         if not os.path.exists(dataset_path):
-            with open(dataset_path, "wb") as f:
-                dill.dump(dataset, f)
+            # with open(dataset_path, "wb") as f:
+            #     dill.dump(dataset, f)
+                torch.save(dataset, dataset_path)
 
-    test_dataset_name = "train_dataset"
-    for idx, dataset in enumerate(test_datasets):
-        dataset_name = test_dataset_name + "_{}".format(idx)
-        dataset_path = os.path.join(test_dataset_dir, dataset_name)
-        if not os.path.exists(dataset_path):
-            with open(dataset_path, "wb") as f:
-                dill.dump(dataset, f)
+    if test_datasets is not None:
+        test_dataset_name = "train_dataset"
+        for idx, dataset in enumerate(test_datasets):
+            dataset_name = test_dataset_name + "_{}".format(idx)
+            dataset_path = os.path.join(test_dataset_dir, dataset_name)
+            if not os.path.exists(dataset_path):
+                # with open(dataset_path, "wb") as f:
+                #     dill.dump(dataset, f)
+                torch.save(dataset, dataset_path)
 
     print("数据集保存完成")
 
@@ -56,9 +58,9 @@ def data_split():
 
     mnist_len = len(mnist_data)
     
-    client_1_dataset, client_2_dataset, client_3_dataset, test_dataset = torch.utils.data.random_split(mnist_data, [int(mnist_len*0.3), int(mnist_len*0.3), int(mnist_len*0.3), int(mnist_len*0.1)])
-    train_datasets, test_datasets = [client_1_dataset, client_2_dataset, client_3_dataset], [test_dataset]
-    save_split_dataset("mnist", train_datasets, test_datasets)
+    client_1_dataset, client_2_dataset, client_3_dataset = torch.utils.data.random_split(mnist_data, [int(mnist_len*0.3), int(mnist_len*0.3), int(mnist_len*0.4)])
+    train_datasets = [client_1_dataset, client_2_dataset, client_3_dataset]
+    save_split_dataset("mnist", train_datasets, None)
 
 
     
