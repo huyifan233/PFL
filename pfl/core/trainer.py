@@ -473,9 +473,11 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
     def _load_local_model_pars(self):
         print("计算本地模型和全局模型的KL散度")
         local_model_pars_files = os.listdir(self.local_model_parameters_dir)
+        local_model_pars_files.sort()
         if len(local_model_pars_files) != 0:
             latest_local_model_pars_file = local_model_pars_files[-1]
             letest_local_model_pars_path = os.path.join(self.local_model_parameters_dir, latest_local_model_pars_file)
+            self.logger.info("加载本地模型参数: {}".format(latest_local_model_pars_file))
             return torch.load(letest_local_model_pars_path)
         return None
 
@@ -511,7 +513,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                 if self.job.get_job_id() in runtime_config.EXEC_JOB_LIST:
                     runtime_config.EXEC_JOB_LIST.remove(self.job.get_job_id())
                 self.fed_step[self.job.get_job_id()] = fed_step
-            if self.job.get_job_id() not in runtime_config.EXEC_JOB_LIST:
+            if self.job.get_job_id() not in runtime_config.EXEC_JOB_LIST and self._check_local_model_pars():
                 # job_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
                 if aggregate_file is not None:
                     self.logger.info("load {} parameters".format(aggregate_file))
@@ -519,7 +521,6 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                     model_pars = torch.load(aggregate_file)
                     new_model.load_state_dict(model_pars)
                     self.model.set_model(new_model)
-                if self._check_local_model_pars():
                     print("存在本地模型")
                     local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
                     local_model_pars = self._load_local_model_pars()
