@@ -33,7 +33,7 @@ def save_split_dataset(dataset_name, train_datasets, test_datasets):
                 torch.save(dataset, dataset_path)
 
     if test_datasets is not None:
-        test_dataset_name = "train_dataset"
+        test_dataset_name = "test_dataset"
         for idx, dataset in enumerate(test_datasets):
             dataset_name = test_dataset_name + "_{}".format(idx)
             dataset_path = os.path.join(test_dataset_dir, dataset_name)

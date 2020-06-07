@@ -54,7 +54,7 @@ class Aggregator(object):
         # print("job_model_pars_path: ", job_model_pars_path)
         for f in os.listdir(job_model_pars_path):
             if f.find("models_") != -1:
-                client_id = int(f.split("-")[-1])
+                client_id = int(f.split("_")[-1])
                 one_model_par_path = os.path.join(job_model_pars_path, f)
                 # print("one_model_par_path: ", one_model_par_path)
                 one_model_par_files = os.listdir(one_model_par_path)
@@ -94,6 +94,9 @@ class FedAvgAggregator(Aggregator):
 
     def calc_client_priority(self, fed_step, job_id):
         client_priority_weights = {}
+        # kl_loss_dir = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir")
+        # if not os.path.exists(kl_loss_dir):
+        #     os.mkdir(kl_loss_dir)
         kl_loss_path = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir","{}_{}".format("kl_loss", fed_step))
         with open(kl_loss_path, "r") as f:
             lines = f.readlines()
@@ -128,6 +131,7 @@ class FedAvgAggregator(Aggregator):
             if job_fed_step != fed_step and job_model_pars is not None:
                 self.logger.info("计算每个节点的权重....")
                 self.client_priority_weights = self.calc_client_priority(fed_step, job.get_job_id())
+                print("每个节点权重为：", self.client_priority_weights)
                 self.logger.info("Aggregating......")
                 self._exec(job_model_pars, self.base_model_path, job.get_job_id(), fed_step, self.client_priority_weights)
                 self.fed_step[job.get_job_id()] = fed_step

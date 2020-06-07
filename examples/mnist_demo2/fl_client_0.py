@@ -53,7 +53,7 @@ if __name__ == "__main__":
     #     transforms.ToTensor(),
     #     transforms.Normalize((0.13066062,), (0.30810776,))
     # ]))
-    dataset_path = os.path.join(os.path.abspath("../"), "mnist", "train_dataset_dir", "train_dataset_{}".format(CLIENT_ID))
+    dataset_path = os.path.join(os.path.abspath("../"), "mnist_demo2", "mnist", "train_dataset_dir", "train_dataset_{}".format(CLIENT_ID))
 
     dataset = torch.load(dataset_path)
 
@@ -62,13 +62,13 @@ if __name__ == "__main__":
 
     local_pfl_models = client.get_remote_pfl_models()
     local_model = local_pfl_models[0].get_model()
-    _thread.start_new_thread(train_local_model_with_local_data, (local_model, mnist_data))
-
+    # _thread.start_new_thread(train_local_model_with_local_data, (local_model, dataset))
+    train_local_model_with_local_data(local_model, dataset)
 
     for pfl_model in pfl_models:
         optimizer = torch.optim.SGD(pfl_model.get_model().parameters(), lr=0.01, momentum=0.5)
         train_strategy = TrainStrategy(optimizer=optimizer, batch_size=32, loss_function=LossStrategy.NLL_LOSS)
         pfl_model.set_train_strategy(train_strategy)
 
-    TrainerController(work_mode=WorkModeStrategy.WORKMODE_STANDALONE, models=pfl_models, data=mnist_data, client_id=CLIENT_ID,
+    TrainerController(work_mode=WorkModeStrategy.WORKMODE_STANDALONE, models=pfl_models, data=dataset, client_id=CLIENT_ID,
                       curve=False, concurrent_num=3).start()
