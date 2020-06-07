@@ -143,7 +143,7 @@ class TrainNormalStrategy(TrainStrategy):
         dataloader = torch.utils.data.DataLoader(self.data,
                                                  batch_size=train_model.get_train_strategy().get_batch_size(),
                                                  shuffle=True,
-                                                 num_workers=1,
+                                                 num_workers=0,
                                                  pin_memory=True)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
