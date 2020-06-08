@@ -33,6 +33,6 @@ if __name__ == "__main__":
 
     job_manager = JobManager()
     job = job_manager.generate_job(work_mode=strategy.WorkModeStrategy.WORKMODE_STANDALONE,
-                                   fed_strategy=strategy.FederateStrategy.FED_AVG, epoch=100, model=Net)
+                                   fed_strategy=strategy.FederateStrategy.FED_AVG, epoch=50, model=Net)
     job_manager.submit_job(job, model)
 

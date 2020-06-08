@@ -20,6 +20,7 @@ import shutil
 import logging
 import requests
 import importlib
+import threading
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from pfl.entity import runtime_config
@@ -106,7 +107,8 @@ class TrainStrategy(object):
             if os.path.exists(init_model_pars_path):
                 shutil.move(init_model_pars_path, first_aggregate_path)
         file_list = os.listdir(job_model_path)
-        file_list.sort()
+        # file_list.sort()
+        file_list = sorted(file_list, key=lambda x: os.path.getmtime(os.path.join(job_model_path, x)))
         if len(file_list) != 0:
             return os.path.join(job_model_path, file_list[-1]), len(file_list)
         return None, 0
@@ -473,7 +475,8 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
     def _load_local_model_pars(self):
         print("计算本地模型和全局模型的KL散度")
         local_model_pars_files = os.listdir(self.local_model_parameters_dir)
-        local_model_pars_files.sort()
+        # local_model_pars_files.sort()
+        local_model_pars_files = sorted(local_model_pars_files, key=lambda x: os.path.getmtime(os.path.join(self.local_model_parameters_dir, x)))
         if len(local_model_pars_files) != 0:
             latest_local_model_pars_file = local_model_pars_files[-1]
             letest_local_model_pars_path = os.path.join(self.local_model_parameters_dir, latest_local_model_pars_file)
