@@ -169,10 +169,10 @@ class TrainNormalStrategy(TrainStrategy):
             if idx % 200 == 0:
                 self.logger.info("train_loss: {}".format(loss.item()))
         accuracy = acc / len(dataloader.dataset)
-        torch.save(model.state_dict(),
-                   os.path.join(job_models_path, "tmp_parameters_{}".format(fed_step)))
+        # torch.save(model.state_dict(),
+        #            os.path.join(job_models_path, "tmp_parameters_{}".format(fed_step)))
 
-        return accuracy, loss.item()
+        return accuracy, loss.item(), model
 
     def _calc_kl_loss_between_models(self, fed_model, local_model):
 
@@ -464,20 +464,22 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
     def __init__(self, job, data, fed_step, client_id, model, curve):
         super(TrainStandloneNormalStrategy, self).__init__(job, data, fed_step, client_id, model, curve)
         self.logger = LoggerFactory.getLogger("TrainStandloneNormalStrategy", logging.INFO)
-        self.local_model_parameters_dir = os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id))
+        self.local_model_parameters_dir = os.path.join(LOCAL_MODEL_BASE_PATH, "models_{}".format(self.job.get_job_id()), "{}".format(AGGREGATE_PATH))
 
-    def _check_local_model_pars(self):
-        local_model_pars_files = os.listdir(self.local_model_parameters_dir)
-        if len(local_model_pars_files) != 0:
+    def _check_local_model_pars(self, job_id):
+        # local_model_pars_files = os.listdir(self.local_model_parameters_dir)
+        local_model_pars_files = os.listdir(os.path.join(LOCAL_MODEL_BASE_PATH, "models_{}".format(job_id),
+                                              "{}".format(AGGREGATE_PATH)))
+        if len(local_model_pars_files) >= 1:
             return True
         return False
 
-    def _load_local_model_pars(self):
+    def _load_local_model_pars(self, job_id):
         print("计算本地模型和全局模型的KL散度")
-        local_model_pars_files = os.listdir(self.local_model_parameters_dir)
+        local_model_pars_files = os.listdir(os.path.join(LOCAL_MODEL_BASE_PATH, "models_{}".format(job_id), "{}".format(AGGREGATE_PATH)))
         # local_model_pars_files.sort()
         local_model_pars_files = sorted(local_model_pars_files, key=lambda x: os.path.getmtime(os.path.join(self.local_model_parameters_dir, x)))
-        if len(local_model_pars_files) != 0:
+        if len(local_model_pars_files) >= 1:
             latest_local_model_pars_file = local_model_pars_files[-1]
             letest_local_model_pars_path = os.path.join(self.local_model_parameters_dir, latest_local_model_pars_file)
             self.logger.info("加载本地模型参数: {}".format(latest_local_model_pars_file))
@@ -516,7 +518,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                 if self.job.get_job_id() in runtime_config.EXEC_JOB_LIST:
                     runtime_config.EXEC_JOB_LIST.remove(self.job.get_job_id())
                 self.fed_step[self.job.get_job_id()] = fed_step
-            if self.job.get_job_id() not in runtime_config.EXEC_JOB_LIST and self._check_local_model_pars():
+            if self.job.get_job_id() not in runtime_config.EXEC_JOB_LIST:
                 # job_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
                 if aggregate_file is not None:
                     self.logger.info("load {} parameters".format(aggregate_file))
@@ -524,22 +526,26 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                     model_pars = torch.load(aggregate_file)
                     new_model.load_state_dict(model_pars)
                     self.model.set_model(new_model)
-                    print("存在本地模型")
-                    local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
-                    local_model_pars = self._load_local_model_pars()
-                    local_model.load_state_dict(local_model_pars)
-                    kl_loss = self._calc_kl_loss_between_models(self.model.get_model(), local_model)
-                    self._append_to_kl_file(kl_loss, self.job.get_job_id(), fed_step, self.client_id)
-
 
 
                 job_models_path = self._create_job_models_dir(self.client_id, self.job.get_job_id())
                 self.logger.info("job_{} is training, Aggregator strategy: {}".format(self.job.get_job_id(),
-                                                                                      self.job.get_aggregate_strategy()))
+                                                                            self.job.get_aggregate_strategy()))
                 runtime_config.EXEC_JOB_LIST.append(self.job.get_job_id())
-                self.acc, loss = self._train(self.model, job_models_path, self.fed_step.get(self.job.get_job_id()))
+                self.acc, loss, train_model = self._train(self.model, job_models_path, self.fed_step.get(self.job.get_job_id()))
                 self.loss_list.append(loss)
                 self.accuracy_list.append(self.acc)
+                if self._check_local_model_pars(self.job.get_job_id()):
+                    print("存在本地模型")
+                    local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
+                    local_model_pars = self._load_local_model_pars(self.job.get_job_id())
+                    local_model.load_state_dict(local_model_pars)
+                    kl_loss = self._calc_kl_loss_between_models(train_model, local_model)
+                    self._append_to_kl_file(kl_loss, self.job.get_job_id(), fed_step, self.client_id)
+
+                torch.save(train_model.state_dict(),
+                           os.path.join(job_models_path, "tmp_parameters_{}".format(fed_step)))
+
                 self.logger.info("job_{} {}th train accuracy: {}".format(self.job.get_job_id(),
                                                                          self.fed_step.get(self.job.get_job_id()),
                                                                          self.acc))

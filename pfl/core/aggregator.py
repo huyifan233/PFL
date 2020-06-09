@@ -97,7 +97,12 @@ class FedAvgAggregator(Aggregator):
         # kl_loss_dir = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir")
         # if not os.path.exists(kl_loss_dir):
         #     os.mkdir(kl_loss_dir)
+        kl_loss_dir = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir")
         kl_loss_path = os.path.join(self.base_model_path,"models_{}".format(job_id),"kl_loss_dir","{}_{}".format("kl_loss", fed_step))
+
+        # if not os.path.exists(kl_loss_dir):
+        #     return None
+
         with open(kl_loss_path, "r") as f:
             lines = f.readlines()
 
@@ -133,7 +138,10 @@ class FedAvgAggregator(Aggregator):
                 self.client_priority_weights = self.calc_client_priority(fed_step, job.get_job_id())
                 print("每个节点权重为：", self.client_priority_weights)
                 self.logger.info("Aggregating......")
-                self._exec(job_model_pars, self.base_model_path, job.get_job_id(), fed_step, self.client_priority_weights)
+                # # if self.client_priority_weights is None:
+                #     self._exec_avg(job_model_pars, self.base_model_path, job.get_job_id(), fed_step)
+                # else:
+                self._exec_with_weights(job_model_pars, self.base_model_path, job.get_job_id(), fed_step, self.client_priority_weights)
                 self.fed_step[job.get_job_id()] = fed_step
                 WAITING_BROADCAST_AGGREGATED_JOB_ID_LIST.append(job.get_job_id())
                 if job.get_epoch() <= self.fed_step[job.get_job_id()]:
@@ -146,7 +154,7 @@ class FedAvgAggregator(Aggregator):
                                     self.base_model_path)
 
 
-    def _exec(self, job_model_pars, base_model_path, job_id, fed_step, client_priority_weights):
+    def _exec_with_weights(self, job_model_pars, base_model_path, job_id, fed_step, client_priority_weights):
         avg_model_par = job_model_pars[0]['model_par']
         avg_client_id = job_model_pars[0]['client_id']
         for key in avg_model_par.keys():
@@ -156,6 +164,21 @@ class FedAvgAggregator(Aggregator):
                 client_id = job_model_pars[i]['client_id']
                 avg_model_par[key] += job_model_pars[i]['model_par'][key] * client_priority_weights[client_id]
             # avg_model_par[key] = torch.div(avg_model_par[key], len(job_model_pars))
+        tmp_aggregate_dir = os.path.join(base_model_path, "models_{}".format(job_id))
+        tmp_aggregate_path = os.path.join(base_model_path, "models_{}".format(job_id),
+                                          "{}_{}".format(LOCAL_AGGREGATE_FILE, fed_step))
+        if not os.path.exists(tmp_aggregate_dir):
+            os.makedirs(tmp_aggregate_dir)
+        torch.save(avg_model_par, tmp_aggregate_path)
+
+        self.logger.info("job: {} the {}th round parameters aggregated successfully!".format(job_id, fed_step))
+
+    def _exec_avg(self, job_model_pars, base_model_path, job_id, fed_step):
+        avg_model_par = job_model_pars[0]['model_par']
+        for key in avg_model_par.keys():
+            for i in range(1, len(job_model_pars)):
+                avg_model_par[key] += job_model_pars[i]['model_par'][key]
+            avg_model_par[key] = torch.div(avg_model_par[key], len(job_model_pars))
         tmp_aggregate_dir = os.path.join(base_model_path, "models_{}".format(job_id))
         tmp_aggregate_path = os.path.join(base_model_path, "models_{}".format(job_id),
                                           "{}_{}".format(LOCAL_AGGREGATE_FILE, fed_step))

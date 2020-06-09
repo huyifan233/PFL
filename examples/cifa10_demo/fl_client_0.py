@@ -61,9 +61,9 @@ if __name__ == "__main__":
     client = FLClient()
     pfl_models = client.get_remote_pfl_models()
 
-    local_pfl_models = client.get_remote_pfl_models()
-    local_model = local_pfl_models[0].get_model()
-    _thread.start_new_thread(train_local_model_with_local_data, (local_model, dataset, 50))
+    # local_pfl_models = client.get_remote_pfl_models()
+    # local_model = local_pfl_models[0].get_model()
+    # _thread.start_new_thread(train_local_model_with_local_data, (local_model, dataset, 50))
     # train_local_model_with_local_data(local_model, dataset, 100)
 
     for pfl_model in pfl_models:
