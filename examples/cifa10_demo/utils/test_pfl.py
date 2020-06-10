@@ -34,7 +34,7 @@ def test(dataset_name):
 
     model_pars_dir = os.path.join(os.path.abspath("../"), "final_model_pars")
     model_pars_list = os.listdir(model_pars_dir)
-
+    total_avg_list = []
     for model_pars_name in model_pars_list:
         model_pars_path = os.path.join(model_pars_dir, model_pars_name)
         model = Net()
@@ -49,8 +49,9 @@ def test(dataset_name):
             acc = torch.mean(torch.eq(cls_pred_softmax, batch_target), dtype=torch.float32)
             acc_list.append(acc)
         avg_acc = torch.mean(torch.Tensor(acc_list))
+        total_avg_list.append(avg_acc)
         print("{}, acc: ", avg_acc)
-
+    print(torch.mean(torch.Tensor(total_avg_list)))
 
 
 if __name__ == "__main__":
