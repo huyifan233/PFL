@@ -40,17 +40,17 @@ def test(dataset_name):
         model = Net()
         model_pars = torch.load(model_pars_path)
         model.load_state_dict(model_pars)
-        acc_list = []
+        acc = 0
         for idx, (batch_data, batch_target) in enumerate(dataloader):
-
             preds = model(batch_data)
             preds_softmax = F.log_softmax(preds, dim=1)
             cls_pred_softmax = torch.argmax(preds_softmax, dim=1)
-            acc = torch.mean(torch.eq(cls_pred_softmax, batch_target), dtype=torch.float32)
-            acc_list.append(acc)
-        avg_acc = torch.mean(torch.Tensor(acc_list))
+            # acc = torch.mean(torch.eq(cls_pred_softmax, batch_target), dtype=torch.float32)
+            # acc_list.append(acc)
+            acc += torch.eq(preds_softmax.argmax(dim=1), batch_target).sum().float().item()
+
+        avg_acc = acc / len(test_dataset)
         total_avg_list.append(avg_acc)
-        print("{}, acc: ", avg_acc)
     print(torch.mean(torch.Tensor(total_avg_list)))
 
 
