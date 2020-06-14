@@ -176,7 +176,7 @@ class TrainNormalStrategy(TrainStrategy):
 
 
 
-    def _train_with_teacher_distillation(self, train_model, local_model, teacher_model):
+    def _train_with_teacher_distillation(self, train_model, teacher_model):
         """
         Distillation training method
         :param train_model:
@@ -191,19 +191,19 @@ class TrainNormalStrategy(TrainStrategy):
                                                  shuffle=True,
                                                  num_workers=1,
                                                  pin_memory=True)
-        optimizer = train_model.get_train_strategy().get_optimizer()
+
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = train_model.get_model()
         model, teacher_model = model.to(device), teacher_model.to(device)
-
-
+        optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
+        acc = 0
         for idx, (batch_data, batch_target) in enumerate(dataloader):
             batch_data = batch_data.to(device)
             batch_target = batch_target.to(device)
             kl_pred = model(batch_data)
             pred = F.log_softmax(kl_pred, dim=1)
-            acc = torch.mean(torch.eq(kl_pred.argmax(dim=1), batch_target), dtype=torch.float32)
+            acc += torch.eq(pred.argmax(dim=1), batch_target).sum().float().item()
             # if job_l2_dist:
             #     loss_distillation = self._compute_l2_dist(kl_pred, kl_pred)
             # else:
@@ -222,6 +222,7 @@ class TrainNormalStrategy(TrainStrategy):
 
             loss_s = self._compute_loss(train_model.get_train_strategy().get_loss_function(), pred, batch_target)
             loss = loss_s + 0.5 * loss_distillation
+            # loss = loss_distillation
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -230,11 +231,8 @@ class TrainNormalStrategy(TrainStrategy):
                 self.logger.info("distillation_loss: {}".format(loss.item()))
         # torch.save(model.state_dict(),
         #            os.path.join(job_models_path, "tmp_parameters_{}".format(self.fed_step[self.job.get_job_id()] + 1)))
-        kl_loss = self._calc_kl_loss_between_models(model, teacher_model)
-        kl_loss2 = self._calc_kl_loss_between_models(model, local_model)
-        print("kl_loss:::  ", kl_loss)
-        print("kl_loss5:::  ", kl_loss2)
-        return acc.item(), loss.item(), model
+        accuracy = acc / len(dataloader.dataset)
+        return accuracy, loss.item(), model
 
 
 
@@ -270,6 +268,7 @@ class TrainNormalStrategy(TrainStrategy):
                 batch_kl_loss_list.append(kl_loss)
         kl_loss_list.append(torch.mean(torch.tensor(batch_kl_loss_list, dtype=torch.float32)))
         self.logger.info("计算平均kl散度")
+        # print("kl_Loss_list: ", kl_loss_list)
         mean_kl_loss = torch.mean(torch.tensor(kl_loss_list, dtype=torch.float32))
         return mean_kl_loss
 
@@ -488,6 +487,9 @@ class TrainDistillationStrategy(TrainNormalStrategy):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = train_model.get_model()
         model, other_model = model.to(device), copy.deepcopy(model).to(device)
+
+        optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
+
         acc = 0
         for idx, (batch_data, batch_target) in enumerate(dataloader):
             batch_data = batch_data.to(device)
@@ -544,7 +546,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
 
     def _check_teacher_model_pars(self):
         local_teacher_model_files = os.listdir(os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id)))
-        if len(local_teacher_model_files) >= 1:
+        if len(local_teacher_model_files) >= 10:
             return True
         return False
 
@@ -621,22 +623,22 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                 latest_teacher_model_pars = self._get_latest_teacher_model_pars(self.client_id)
                 teacher_model.load_state_dict(latest_teacher_model_pars)
                 # print("self.model parameters: ", self.model.get_model().parameters())
-                local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
-                local_model_pars = self._load_local_model_pars(self.job.get_job_id())
-                local_model.load_state_dict(local_model_pars)
-                self.acc, self.loss, train_model = self._train_with_teacher_distillation(self.model,local_model, teacher_model)
+                # local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
+                # local_model_pars = self._load_local_model_pars(self.job.get_job_id())
+                # local_model.load_state_dict(local_model_pars)
+                # local_model = copy.deepcopy(self.model.get_model())
+                self.acc, self.loss, train_model = self._train_with_teacher_distillation(self.model, teacher_model)
             # self.acc, loss, train_model = self._train(self.model, job_models_path, self.fed_step.get(self.job.get_job_id()))
                 if self._check_local_model_pars(self.job.get_job_id()):
                     # print("train_model parameters: ", train_model.parameters())
-                    print("kl_loss2: ", self._calc_kl_loss_between_models(train_model, teacher_model))
-
+                    # print("kl_loss2: ", self._calc_kl_loss_between_models(train_model, teacher_model))
 
                     self.logger.info("Exits pre aggregated file")
                     local_model = self._load_job_model(self.job.get_job_id(), self.job.get_train_model_class_name())
                     local_model_pars = self._load_local_model_pars(self.job.get_job_id())
                     local_model.load_state_dict(local_model_pars)
                     kl_loss = self._calc_kl_loss_between_models(train_model, local_model)
-                    print("kl_loss3: ", kl_loss)
+                    # print("kl_loss3: ", kl_loss)
                     self._append_to_kl_file(kl_loss, self.job.get_job_id(), fed_step, self.client_id)
 
                     torch.save(train_model.state_dict(),
