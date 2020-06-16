@@ -62,7 +62,7 @@ if __name__ == "__main__":
     pfl_models = client.get_remote_pfl_models()
 
     local_model = client.get_latest_local_model(CLIENT_ID)
-    _thread.start_new_thread(train_local_model_with_local_data, (local_model, dataset, 100))
+    _thread.start_new_thread(train_local_model_with_local_data, (local_model, dataset, 1300))
     # train_local_model_with_local_data(local_model, dataset, 100)
 
     for pfl_model in pfl_models:
