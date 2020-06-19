@@ -185,53 +185,56 @@ class TrainNormalStrategy(TrainStrategy):
         :return:
         """
         # TODO: transfer training code to c++ and invoked by python using pybind11
-
-        dataloader = torch.utils.data.DataLoader(self.data,
-                                                 batch_size=train_model.get_train_strategy().get_batch_size(),
-                                                 shuffle=True,
-                                                 num_workers=1,
-                                                 pin_memory=True)
-
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = train_model.get_model()
-        model, teacher_model = model.to(device), teacher_model.to(device)
-        optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
-        acc = 0
-        for idx, (batch_data, batch_target) in enumerate(dataloader):
-            batch_data = batch_data.to(device)
-            batch_target = batch_target.to(device)
-            kl_pred = model(batch_data)
-            pred = F.log_softmax(kl_pred, dim=1)
-            acc += torch.eq(pred.argmax(dim=1), batch_target).sum().float().item()
-            # if job_l2_dist:
-            #     loss_distillation = self._compute_l2_dist(kl_pred, kl_pred)
-            # else:
-            loss_distillation = self._compute_loss(LossStrategy.KLDIV_LOSS, F.softmax(kl_pred, dim=1),
-                                                       F.softmax(kl_pred, dim=1))
-            # for other_model_pars in other_models_pars:
-            #     other_model.load_state_dict(other_model_pars)
-            teacher_model_kl_pred = teacher_model(batch_data).detach()
+
+        for _ in range(5):
+
+            dataloader = torch.utils.data.DataLoader(self.data,
+                                                     batch_size=train_model.get_train_strategy().get_batch_size(),
+                                                     shuffle=True,
+                                                     num_workers=1,
+                                                     pin_memory=True)
+
+
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+            model, teacher_model = model.to(device), teacher_model.to(device)
+            optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
+            acc = 0
+            for idx, (batch_data, batch_target) in enumerate(dataloader):
+                batch_data = batch_data.to(device)
+                batch_target = batch_target.to(device)
+                kl_pred = model(batch_data)
+                pred = F.log_softmax(kl_pred, dim=1)
+                acc += torch.eq(pred.argmax(dim=1), batch_target).sum().float().item()
                 # if job_l2_dist:
-                #     loss_distillation += self._compute_l2_dist(kl_pred, other_model_kl_pred)
+                #     loss_distillation = self._compute_l2_dist(kl_pred, kl_pred)
                 # else:
-            loss_distillation += self._compute_loss(LossStrategy.KLDIV_LOSS, F.softmax(kl_pred, dim=1),
-                                                            F.softmax(teacher_model_kl_pred, dim=1))
+                loss_distillation = self._compute_loss(LossStrategy.KLDIV_LOSS, F.softmax(kl_pred, dim=1),
+                                                           F.softmax(kl_pred, dim=1))
+                # for other_model_pars in other_models_pars:
+                #     other_model.load_state_dict(other_model_pars)
+                teacher_model_kl_pred = teacher_model(batch_data).detach()
+                    # if job_l2_dist:
+                    #     loss_distillation += self._compute_l2_dist(kl_pred, other_model_kl_pred)
+                    # else:
+                loss_distillation += self._compute_loss(LossStrategy.KLDIV_LOSS, F.softmax(kl_pred, dim=1),
+                                                                F.softmax(teacher_model_kl_pred, dim=1))
 
 
 
-            loss_s = self._compute_loss(train_model.get_train_strategy().get_loss_function(), pred, batch_target)
-            loss = loss_s + 0.5 * loss_distillation
-            # loss = loss_distillation
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if idx % 200 == 0:
-                # print("distillation_loss: ", loss.item())
-                self.logger.info("distillation_loss: {}".format(loss.item()))
-        # torch.save(model.state_dict(),
-        #            os.path.join(job_models_path, "tmp_parameters_{}".format(self.fed_step[self.job.get_job_id()] + 1)))
-        accuracy = acc / len(dataloader.dataset)
+                loss_s = self._compute_loss(train_model.get_train_strategy().get_loss_function(), pred, batch_target)
+                loss = loss_s + 0.5 * loss_distillation
+                # loss = loss_distillation
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                if idx % 200 == 0:
+                    # print("distillation_loss: ", loss.item())
+                    self.logger.info("distillation_loss: {}".format(loss.item()))
+            # torch.save(model.state_dict(),
+            #            os.path.join(job_models_path, "tmp_parameters_{}".format(self.fed_step[self.job.get_job_id()] + 1)))
+            accuracy = acc / len(dataloader.dataset)
         return accuracy, loss.item(), model
 
 
@@ -546,7 +549,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
 
     def _check_teacher_model_pars(self):
         local_teacher_model_files = os.listdir(os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id)))
-        if len(local_teacher_model_files) >= 10:
+        if len(local_teacher_model_files) >= 60:
             return True
         return False
 
