@@ -17,13 +17,16 @@ def save_lcoal_model_parameters(local_model_parameters, local_model_parameters_p
 
 
 def train_local_model_with_local_data(local_model, cifar10, epoch):
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataloader = torch.utils.data.DataLoader(cifar10, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
-    optimizer = torch.optim.SGD(local_model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.SGD(local_model.parameters(), lr=0.01, momentum=0.5)
     local_step = 0
     local_model_parameters_dir = os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(CLIENT_ID))
     if not os.path.exists(local_model_parameters_dir):
         os.mkdir(local_model_parameters_dir)
-
+    local_model.train()
+    local_model = local_model.to(device)
     for idx in range(epoch):
         for idx, (batch_data, batch_target) in enumerate(dataloader):
             # print(batch_data.shape)
@@ -32,6 +35,8 @@ def train_local_model_with_local_data(local_model, cifar10, epoch):
             #     local_model_paramaters_path = os.path.join(local_model_parameters_dir, "paramaters_{}".format(local_step))
             #     save_lcoal_model_parameters(local_model.state_dict(), local_model_paramaters_path)
             #     local_step += 1
+            batch_data = batch_data.to(device)
+            batch_target = batch_target.to(device)
             preds = local_model(batch_data)
             preds_softmax = F.log_softmax(preds, dim=1)
             loss = F.nll_loss(preds_softmax, batch_target)
@@ -54,7 +59,7 @@ if __name__ == "__main__":
     #     transforms.ToTensor(),
     #     transforms.Normalize((0.13066062,), (0.30810776,))
     # ]))
-    dataset_path = os.path.join(os.path.abspath("../"), "cifa10_demo", "cifa10", "train_dataset_dir", "train_dataset_{}".format(CLIENT_ID))
+    dataset_path = os.path.join(os.path.abspath("../"), "cifa10_demo2", "cifa10", "train_dataset_dir", "train_dataset_{}".format(CLIENT_ID))
 
     dataset = torch.load(dataset_path)
 
@@ -66,7 +71,7 @@ if __name__ == "__main__":
     # train_local_model_with_local_data(local_model, dataset, 100)
 
     for pfl_model in pfl_models:
-        optimizer = torch.optim.SGD(pfl_model.get_model().parameters(), lr=0.01, momentum=0.9)
+        optimizer = torch.optim.SGD(pfl_model.get_model().parameters(), lr=0.01, momentum=0.5)
         train_strategy = TrainStrategy(optimizer=optimizer, batch_size=32, loss_function=LossStrategy.NLL_LOSS)
         pfl_model.set_train_strategy(train_strategy)
 

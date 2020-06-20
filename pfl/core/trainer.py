@@ -151,13 +151,13 @@ class TrainNormalStrategy(TrainStrategy):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         acc = 0
         model = train_model.get_model()
+        model = model.to(device)
         if train_model.get_train_strategy().get_optimizer() is not None:
             optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
         else:
             optimizer = self._generate_new_scheduler(model, train_model.get_train_strategy().get_scheduler())
         for idx, (batch_data, batch_target) in enumerate(dataloader):
             batch_data, batch_target = batch_data.to(device), batch_target.to(device)
-            model = model.to(device)
             pred = model(batch_data)
             log_pred = torch.log(F.softmax(pred, dim=1))
             loss = self._compute_loss(train_model.get_train_strategy().get_loss_function(), log_pred, batch_target)
@@ -186,7 +186,8 @@ class TrainNormalStrategy(TrainStrategy):
         """
         # TODO: transfer training code to c++ and invoked by python using pybind11
         model = train_model.get_model()
-
+        model.train()
+        teacher_model.train()
         for _ in range(5):
 
             dataloader = torch.utils.data.DataLoader(self.data,
@@ -249,14 +250,15 @@ class TrainNormalStrategy(TrainStrategy):
 
         # print("fed_model: ",fed_model.parameters())
         # print("local_model: ", local_model.parameters())
-
+        fed_model.train()
+        local_model.train()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # fed_model.to(device)
-        # local_model.to(device)
+        fed_model.to(device)
+        local_model.to(device)
         kl_loss_list = []
         batch_kl_loss_list = []
         for idx, (batch_data, batch_target) in enumerate(dataloader):
-            # batch_data, batch_target = batch_data.to(device), batch_target.to(device)
+            batch_data, batch_target = batch_data.to(device), batch_target.to(device)
             if idx % 20 == 0:
                 if len(batch_kl_loss_list) != 0:
                     batch_mean_kl_loss = torch.mean(torch.tensor(batch_kl_loss_list, dtype=torch.float32))
@@ -549,7 +551,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
 
     def _check_teacher_model_pars(self):
         local_teacher_model_files = os.listdir(os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id)))
-        if len(local_teacher_model_files) >= 60:
+        if len(local_teacher_model_files) >= 10:
             return True
         return False
 
@@ -589,6 +591,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
 
 
     def train(self):
+        self._create_job_models_dir(self.client_id, self.job.get_job_id())
         while True:
             self.fed_step[self.job.get_job_id()] = 0 if self.fed_step.get(self.job.get_job_id()) is None else \
                 self.fed_step.get(self.job.get_job_id())
