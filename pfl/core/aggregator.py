@@ -18,6 +18,9 @@ import torch
 import time
 import requests
 import logging
+import torch
+from torch import nn
+import torch.nn.functional as F
 from concurrent.futures import ThreadPoolExecutor
 from pfl.core.strategy import WorkModeStrategy
 from pfl.core.job_manager import JobManager
@@ -25,6 +28,31 @@ from pfl.utils.utils import LoggerFactory
 from pfl.entity.runtime_config import WAITING_BROADCAST_AGGREGATED_JOB_ID_LIST, CONNECTED_TRAINER_LIST
 
 LOCAL_AGGREGATE_FILE = os.path.join("tmp_aggregate_pars", "avg_pars")
+
+
+
+
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5, 1)
+        self.conv2 = nn.Conv2d(6, 16, 5, 1)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = x.view(-1, 16 * 5 * 5)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        #need to return logits
+        return x
 
 
 class Aggregator(object):
@@ -77,6 +105,24 @@ class Aggregator(object):
             file_num = int(file.split("_")[-1])
             last_num = file_num if last_num < file_num else last_num
         return last_num
+
+    def _validate_test_dataset(self, test_model):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        test_dataset_path = os.path.join(os.path.abspath("."), "cifa10", "test_dataset_dir", "test_dataset")
+        test_dataset = torch.load(test_dataset_path)
+        dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
+
+        test_model.eval()
+        local_model = test_model.to(device)
+        acc = 0
+        for idx, (batch_data, batch_target) in enumerate(dataloader):
+            batch_data = batch_data.to(device)
+            batch_target = batch_target.to(device)
+            preds = local_model(batch_data)
+            preds_softmax = F.log_softmax(preds, dim=1)
+            cls_pred_softmax = torch.argmax(preds_softmax, dim=1)
+            acc += torch.eq(cls_pred_softmax, batch_target).sum().float().item()
+        return acc / len(test_dataset)
 
 
 class FedAvgAggregator(Aggregator):
@@ -167,11 +213,15 @@ class FedAvgAggregator(Aggregator):
         tmp_aggregate_dir = os.path.join(base_model_path, "models_{}".format(job_id))
         tmp_aggregate_path = os.path.join(base_model_path, "models_{}".format(job_id),
                                           "{}_{}".format(LOCAL_AGGREGATE_FILE, fed_step))
+
+        test_model = Net()
+        test_model.load_state_dict(avg_model_par)
+        self.test_acc = self._validate_test_dataset(test_model)
         if not os.path.exists(tmp_aggregate_dir):
             os.makedirs(tmp_aggregate_dir)
         torch.save(avg_model_par, tmp_aggregate_path)
 
-        self.logger.info("job: {} the {}th round parameters aggregated successfully!".format(job_id, fed_step))
+        self.logger.info("job: {} the {}th round parameters aggregated successfully!, test accuract: {}".format(job_id, fed_step, self.test_acc))
 
     def _exec_avg(self, job_model_pars, base_model_path, job_id, fed_step):
         avg_model_par = job_model_pars[0]['model_par']

@@ -240,6 +240,27 @@ class TrainNormalStrategy(TrainStrategy):
 
 
 
+    def _validate_test_dataset(self, test_model):
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        test_dataset_path = os.path.join(os.path.abspath("."), "cifa10", "test_dataset_dir", "test_dataset")
+        test_dataset = torch.load(test_dataset_path)
+        dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
+
+        test_model.eval()
+        local_model = test_model.to(device)
+        acc = 0
+        for idx, (batch_data, batch_target) in enumerate(dataloader):
+            batch_data = batch_data.to(device)
+            batch_target = batch_target.to(device)
+            preds = local_model(batch_data)
+            preds_softmax = F.log_softmax(preds, dim=1)
+            cls_pred_softmax = torch.argmax(preds_softmax, dim=1)
+            acc += torch.eq(cls_pred_softmax, batch_target).sum().float().item()
+        return acc / len(test_dataset)
+
+
+
+
     def _calc_kl_loss_between_models(self, fed_model, local_model):
 
         dataloader = torch.utils.data.DataLoader(self.data,
@@ -634,6 +655,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
                 # local_model.load_state_dict(local_model_pars)
                 # local_model = copy.deepcopy(self.model.get_model())
                 self.acc, self.loss, train_model = self._train_with_teacher_distillation(self.model, teacher_model)
+                # self.test_acc = self._validate_test_dataset(train_model)
             # self.acc, loss, train_model = self._train(self.model, job_models_path, self.fed_step.get(self.job.get_job_id()))
                 if self._check_local_model_pars(self.job.get_job_id()):
                     # print("train_model parameters: ", train_model.parameters())

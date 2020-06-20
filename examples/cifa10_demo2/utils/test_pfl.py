@@ -42,6 +42,7 @@ def test(dataset_name):
         print(model_pars_path)
         model = Net()
         model = model.to(device)
+        model.eval()
         model_pars = torch.load(model_pars_path)
         model.load_state_dict(model_pars)
         acc = 0
