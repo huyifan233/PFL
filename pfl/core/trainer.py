@@ -551,7 +551,7 @@ class TrainStandloneNormalStrategy(TrainNormalStrategy):
 
     def _check_teacher_model_pars(self):
         local_teacher_model_files = os.listdir(os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(self.client_id)))
-        if len(local_teacher_model_files) >= 10:
+        if len(local_teacher_model_files) >= 30:
             return True
         return False
 
