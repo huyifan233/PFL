@@ -31,7 +31,7 @@ def test(dataset_name):
     test_dataset_path = os.path.join(os.path.abspath("../"), dataset_name, "test_dataset_dir", "test_dataset")
     test_dataset = torch.load(test_dataset_path)
     dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
-
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_pars_dir = os.path.join(os.path.abspath("../"), "final_model_pars")
     model_pars_list = os.listdir(model_pars_dir)
     total_avg_list = []
@@ -40,9 +40,11 @@ def test(dataset_name):
         model = Net()
         model_pars = torch.load(model_pars_path)
         model.load_state_dict(model_pars)
+        model = model.to(device)
         acc_list = []
         for idx, (batch_data, batch_target) in enumerate(dataloader):
-
+            batch_target = batch_target.to(device)
+            batch_data = batch_data.to(device)
             preds = model(batch_data)
             preds_softmax = F.log_softmax(preds, dim=1)
             cls_pred_softmax = torch.argmax(preds_softmax, dim=1)
@@ -50,9 +52,9 @@ def test(dataset_name):
             acc_list.append(acc)
         avg_acc = torch.mean(torch.Tensor(acc_list))
         total_avg_list.append(avg_acc)
-        print("{}, acc: ", avg_acc)
-    print(torch.mean(torch.Tensor(total_avg_list)))
-
+        # print("{}, acc: ", avg_acc)
+    # print(torch.mean(torch.Tensor(total_avg_list)))
+    print(total_avg_list)
 
 if __name__ == "__main__":
 

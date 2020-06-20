@@ -142,33 +142,35 @@ class TrainNormalStrategy(TrainStrategy):
         :return:
         """
         # TODO: transfer training code to c++ and invoked by python using pybind11
-        dataloader = torch.utils.data.DataLoader(self.data,
-                                                 batch_size=train_model.get_train_strategy().get_batch_size(),
-                                                 shuffle=True,
-                                                 num_workers=0,
-                                                 pin_memory=True)
-
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        acc = 0
         model = train_model.get_model()
-        if train_model.get_train_strategy().get_optimizer() is not None:
-            optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
-        else:
-            optimizer = self._generate_new_scheduler(model, train_model.get_train_strategy().get_scheduler())
-        for idx, (batch_data, batch_target) in enumerate(dataloader):
-            batch_data, batch_target = batch_data.to(device), batch_target.to(device)
-            model = model.to(device)
-            pred = model(batch_data)
-            log_pred = torch.log(F.softmax(pred, dim=1))
-            loss = self._compute_loss(train_model.get_train_strategy().get_loss_function(), log_pred, batch_target)
-            acc += torch.eq(pred.argmax(dim=1), batch_target).sum().float().item()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        model = model.to(device)
+        model.train()
+        for _ in range(5):
+            dataloader = torch.utils.data.DataLoader(self.data,
+                                                     batch_size=train_model.get_train_strategy().get_batch_size(),
+                                                     shuffle=True,
+                                                     num_workers=0,
+                                                     pin_memory=True)
 
-            if idx % 200 == 0:
-                self.logger.info("train_loss: {}".format(loss.item()))
-        accuracy = acc / len(dataloader.dataset)
+            acc = 0
+            if train_model.get_train_strategy().get_optimizer() is not None:
+                optimizer = self._generate_new_optimizer(model, train_model.get_train_strategy().get_optimizer())
+            else:
+                optimizer = self._generate_new_scheduler(model, train_model.get_train_strategy().get_scheduler())
+            for idx, (batch_data, batch_target) in enumerate(dataloader):
+                batch_data, batch_target = batch_data.to(device), batch_target.to(device)
+                pred = model(batch_data)
+                log_pred = torch.log(F.softmax(pred, dim=1))
+                loss = self._compute_loss(train_model.get_train_strategy().get_loss_function(), log_pred, batch_target)
+                acc += torch.eq(pred.argmax(dim=1), batch_target).sum().float().item()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                if idx % 200 == 0:
+                    self.logger.info("train_loss: {}".format(loss.item()))
+            accuracy = acc / len(dataloader.dataset)
         # torch.save(model.state_dict(),
         #            os.path.join(job_models_path, "tmp_parameters_{}".format(fed_step)))
 
@@ -183,12 +185,12 @@ class TrainNormalStrategy(TrainStrategy):
                                                  pin_memory=True)
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # fed_model.to(device)
-        # local_model.to(device)
+        fed_model.to(device)
+        local_model.to(device)
         kl_loss_list = []
         batch_kl_loss_list = []
         for idx, (batch_data, batch_target) in enumerate(dataloader):
-            # batch_data, batch_target = batch_data.to(device), batch_target.to(device)
+            batch_data, batch_target = batch_data.to(device), batch_target.to(device)
             if idx % 20 == 0:
                 if len(batch_kl_loss_list) != 0:
                     batch_mean_kl_loss = torch.mean(torch.tensor(batch_kl_loss_list, dtype=torch.float32))

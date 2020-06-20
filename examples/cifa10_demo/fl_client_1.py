@@ -18,7 +18,7 @@ def save_lcoal_model_parameters(local_model_parameters, local_model_parameters_p
 
 def train_local_model_with_local_data(local_model, mnist_data, epoch):
     dataloader = torch.utils.data.DataLoader(mnist_data, batch_size=32, shuffle=True, num_workers=0, pin_memory=True)
-    optimizer = torch.optim.SGD(local_model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = torch.optim.SGD(local_model.parameters(), lr=0.01, momentum=0.5)
     local_step = 0
     local_model_parameters_dir = os.path.join(os.path.abspath("."), "client_{}_model_parameter_dir".format(CLIENT_ID))
     if not os.path.exists(local_model_parameters_dir):
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # train_local_model_with_local_data(local_model, dataset, 100)
 
     for pfl_model in pfl_models:
-        optimizer = torch.optim.SGD(pfl_model.get_model().parameters(), lr=0.001, momentum=0.9)
+        optimizer = torch.optim.SGD(pfl_model.get_model().parameters(), lr=0.01, momentum=0.5)
         train_strategy = TrainStrategy(optimizer=optimizer, batch_size=32, loss_function=LossStrategy.NLL_LOSS)
         pfl_model.set_train_strategy(train_strategy)
 
